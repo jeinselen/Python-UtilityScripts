@@ -5,6 +5,7 @@
 # -------------------------------
 
 from PIL import Image, ImageDraw
+import random
 import math
 import os
 
@@ -13,14 +14,16 @@ import os
 # -------------------------------
 
 # Input / output
-INPUT_DIRECTORY = "collection"
-OUTPUT_FILE = "final_collage.png"
+INPUT_DIRECTORY = "collage"
+OUTPUT_FILE = "collage-#.png"	# Pound sign will be replaced with sort type
 
 # General layout
 TARGET_SIZE = (4096, 4096)		# Final output image size
 MARGIN_DISTANCE = 8				# Space between images
 INITIAL_RADIUS = 512			# Initial layout
 MAX_INITIAL_DIM = 512			# Maximum starting size
+SORT_TYPE = "RANDOM"			# NONE, AREA, WIDTH, HEIGHT, RANDOM
+RANDOM_COUNT = 25				# Number of generations to attempt (enabled when sort is random)
 
 # Scale to fit
 SCALE_FACTOR = 0.95				# Amount to scale each time
@@ -84,6 +87,12 @@ def initial_rescale(nodes):
 def sort_by_area(nodes):
 	return sorted(nodes, key=lambda n: n['width']*n['height'], reverse=True)
 
+def sort_by_width(nodes):
+	return sorted(nodes, key=lambda n: n['width'], reverse=True)
+
+def sort_by_height(nodes):
+	return sorted(nodes, key=lambda n: n['height'], reverse=True)
+
 
 
 def place_initial(nodes):
@@ -142,8 +151,8 @@ def apply_forces(nodes):
 		# Attraction to center
 		dx_center = CENTER[0] - n1['x']
 		dy_center = CENTER[1] - n1['y']
-		force_x += dx_center * (ATTRACTION_RATE[0] + (scale * ATTRACTION_WEIGHT))	
-		force_y += dy_center * (ATTRACTION_RATE[1] + (scale * ATTRACTION_WEIGHT))	
+		force_x += dx_center * (ATTRACTION_RATE[0] + (scale * ATTRACTION_WEIGHT))
+		force_y += dy_center * (ATTRACTION_RATE[1] + (scale * ATTRACTION_WEIGHT))
 		
 		# Limit movement
 		dist_move = math.sqrt(force_x*force_x + force_y*force_y)
@@ -225,12 +234,40 @@ def compose_final_image(nodes):
 if __name__ == "__main__":
 	image_folder = INPUT_DIRECTORY
 	image_paths = [os.path.join(image_folder, f) for f in os.listdir(image_folder) if f.lower().endswith(('.png', '.jpg', '.jpeg'))]
+	count = RANDOM_COUNT if SORT_TYPE == "RANDOM" else 1
 	
-	nodes = load_images(image_paths)
-	initial_rescale(nodes) # Initial scaling step
-	nodes = sort_by_area(nodes)
-	place_initial(nodes)
-	run_relaxation(nodes)
-	final_image = compose_final_image(nodes)
-	final_image.save(OUTPUT_FILE)
-	print("Final collage saved as final_collage.png")
+	for x in range(count):
+		# Generate file name
+		if count > 1:
+			output = OUTPUT_FILE.replace("#", SORT_TYPE.lower()+str(x + 1))
+		else:
+			output = OUTPUT_FILE.replace("#", SORT_TYPE.lower())
+		
+		# Load image files
+		nodes = load_images(image_paths)
+		
+		# Downsample large images
+		initial_rescale(nodes)
+		
+		# Sort or randomise
+		if SORT_TYPE == "AREA":
+			nodes = sort_by_area(nodes)
+		elif SORT_TYPE == "WIDTH":
+			nodes = sort_by_width(nodes)
+		elif SORT_TYPE == "HEIGHT":
+			nodes = sort_by_height(nodes)
+		elif SORT_TYPE == "RANDOM":
+			nodes = random.sample(nodes, len(nodes))
+		
+		# Initial layout of elements
+		place_initial(nodes)
+		
+		# Pseudo physics simulation
+		run_relaxation(nodes)
+		
+		# Create and save final image
+		final_image = compose_final_image(nodes)
+		final_image.save(output)
+		print("Saved "+output)
+	else:
+		print("Process completed")
